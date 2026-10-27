@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dias desde</title>
+    <style>
+        :root {
+            --fg: #ffffffcf;
+            --muted: #9b9b9b;
+            --bg: #191919;
+            --line: #3f3f3f;
+            color-scheme: dark;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: var(--bg);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+            color: var(--fg);
+            text-align: center;
+            padding: 12px;
+        }
+
+        #dias {
+            font-size: clamp(48px, 20vw, 110px);
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #tempo {
+            font-size: clamp(16px, 5.5vw, 26px);
+            font-weight: 500;
+        }
+
+        #data {
+            font-size: clamp(14px, 4.5vw, 20px);
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        #config {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #config[hidden] {
+            display: none;
+        }
+
+        input[type=date] {
+            font: inherit;
+            font-size: 14px;
+            color: var(--fg);
+            background: transparent;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 5px 8px;
+        }
+
+        button {
+            font: inherit;
+            font-size: 13px;
+            color: var(--muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 6px;
+        }
+
+        button:hover,
+        button:focus-visible {
+            color: var(--fg);
+            background: var(--line);
+            outline: none;
+        }
+
+        button[hidden] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="dias" aria-live="polite">–</div>
+    <div id="tempo"></div>
+    <div id="data"></div>
+    <div id="config" hidden>
+        <input type="date" id="entrada" aria-label="Data de início">
+        <button id="salvar" type="button">Salvar</button>
+    </div>
+    <button id="alterar" type="button" hidden>Alterar data</button>
+
+    <script>
+        (function () {
+            var KEY = "contador-dias-data";
+            var re = /^\d{4}-\d{2}-\d{2}$/;
+            var $ = function (id) { return document.getElementById(id); };
+
+            function lerData() {
+                var h = (location.hash || "").replace("#", "");
+                if (re.test(h)) return h;
+                try { var s = localStorage.getItem(KEY); if (s && re.test(s)) return s; } catch (e) { }
+                return null;
+            }
+
+            function salvarData(v) {
+                try { localStorage.setItem(KEY, v); } catch (e) { }
+                try { history.replaceState(null, "", "#" + v); } catch (e) { location.hash = v; }
+            }
+
+            function plural(n, sing, plur) { return n + " " + (n > 1 ? plur : sing); }
+
+            function diasNoMes(ano, mes) { return new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate(); }
+
+            function render() {
+                var v = lerData();
+                if (!v) {
+                    $("dias").textContent = "–";
+                    $("tempo").textContent = "";
+                    $("data").textContent = "Escolha uma data";
+                    $("config").hidden = false;
+                    $("alterar").hidden = true;
+                    return;
+                }
+                var p = v.split("-").map(Number);
+                var sa = p[0], sm = p[1] - 1, sd = p[2];
+                var agora = new Date();
+                var ta = agora.getFullYear(), tm = agora.getMonth(), td = agora.getDate();
+                var inicio = Date.UTC(sa, sm, sd);
+                var hoje = Date.UTC(ta, tm, td);
+
+                $("data").textContent = ("0" + sd).slice(-2) + "/" + ("0" + (sm + 1)).slice(-2) + "/" + sa;
+                $("config").hidden = true;
+                $("alterar").hidden = false;
+
+                if (hoje < inicio) {
+                    $("dias").textContent = "–";
+                    $("tempo").textContent = "Data no futuro";
+                    return;
+                }
+
+                var dias = Math.round((hoje - inicio) / 86400000);
+
+                var meses = (ta - sa) * 12 + (tm - sm);
+                if (td < sd) meses--;
+                var ancAno = sa + Math.floor((sm + meses) / 12);
+                var ancMes = (sm + meses) % 12;
+                var ancDia = Math.min(sd, diasNoMes(ancAno, ancMes));
+                var ancora = Date.UTC(ancAno, ancMes, ancDia);
+                var d = Math.round((hoje - ancora) / 86400000);
+                var anos = Math.floor(meses / 12);
+                var m = meses % 12;
+
+                $("dias").textContent = String(dias);
+                var partes = [];
+                if (anos > 0) partes.push(plural(anos, "ano", "anos"));
+                if (m > 0) partes.push(plural(m, "mês", "meses"));
+                if (d > 0) partes.push(plural(d, "dia", "dias"));
+                $("tempo").textContent = partes.length ? partes.join(" ") : "0 dia";
+            }
+
+            $("salvar").addEventListener("click", function () {
+                var v = $("entrada").value;
+                if (re.test(v)) { salvarData(v); render(); }
+            });
+
+            $("alterar").addEventListener("click", function () {
+                var v = lerData();
+                if (v) $("entrada").value = v;
+                $("config").hidden = false;
+                $("alterar").hidden = true;
+            });
+
+            window.addEventListener("hashchange", render);
+            render();
+            setInterval(render, 60 * 60 * 1000);
+        })();
+    </script>
+</body>
+
+</html>
